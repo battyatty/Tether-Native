@@ -51,7 +51,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   // Simple drag and drop state - just what we need
   const [draggedIndex, setDraggedIndex] = useState(-1);
   const [dragOffset] = useState(new Animated.ValueXY());
-  const cardHeight = 108;
+  const cardHeight = 80;
   
   // Animated values for each card position
   const cardAnimations = useRef<Animated.Value[]>([]).current;
@@ -306,8 +306,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         maxPointers={1}
         avgTouches={false}
         shouldCancelWhenOutside={false}
-        activeOffsetY={[-8, 8]}
-        activeOffsetX={[-10, 10]}
+        activeOffsetY={[-40, 40]}
+        activeOffsetX={[-80, 80]}
         ref={panRefs[index]}
       >
         <Animated.View style={[cardStyle, animatedStyle]}>
@@ -322,23 +322,41 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 handleTetherPress(tether.id);
               }
             }}
-            activeOpacity={isBeingDragged ? 1 : 0.7}
-            disabled={isBeingDragged}
+            activeOpacity={1}
           >
-            {/* Drag handle indicator */}
-            {isBeingDragged && (
-              <View style={styles.dragHandle}>
-                <Icon name="drag-indicator" size={20} color={theme.text.tertiary} />
+            <View style={styles.cardMainContent}>
+              <View style={styles.tetherContentLeft}>
+                <Text style={[
+                  styles.tetherName,
+                  isBeingDragged && styles.draggedText,
+                ]}>
+                  {tether.name}
+                </Text>
+                
+                <View style={styles.tetherInfo}>
+                  {isScheduled ? (
+                    <View style={styles.timeInfo}>
+                      <Icon name="schedule" size={14} color={theme.text.tertiary} style={styles.timeIcon} />
+                      <Text style={[
+                        styles.timeText,
+                        isBeingDragged && styles.draggedText,
+                      ]}>
+                        {formatTime(tether.scheduledStartTime!)} – {formatTime(calculateEndTime(tether.scheduledStartTime!, totalDuration))}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.flexibleInfo}>
+                      <Text style={[
+                        styles.taskCount,
+                        isBeingDragged && styles.draggedText,
+                      ]}>
+                        {formatDuration(totalDuration)} • {tether.tasks.length} task{tether.tasks.length !== 1 ? 's' : ''}
+                      </Text>
+                    </View>
+                  )}
+                </View>
               </View>
-            )}
-            
-            <View style={styles.tetherHeader}>
-              <Text style={[
-                styles.tetherName,
-                isBeingDragged && styles.draggedText,
-              ]}>
-                {tether.name}
-              </Text>
+              
               <View style={styles.tetherActions}>
                 <TouchableOpacity
                   style={[
@@ -348,7 +366,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                   onPress={() => draggedIndex === -1 && handleMorePress(tether.id)}
                   disabled={isBeingDragged}
                 >
-                  <Icon name="more-vert" size={20} color={theme.text.tertiary} />
+                  <Icon name="more-vert" size={18} color={theme.text.tertiary} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
@@ -358,32 +376,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                   onPress={() => draggedIndex === -1 && handleStartTether(tether.id)}
                   disabled={isBeingDragged}
                 >
-                  <Icon name="play-arrow" size={20} color={theme.accent.tidewake} />
+                  <Icon name="play-arrow" size={18} color={theme.accent.tidewake} />
                 </TouchableOpacity>
               </View>
-            </View>
-            
-            <View style={styles.tetherInfo}>
-              {isScheduled ? (
-                <View style={styles.timeInfo}>
-                  <Icon name="schedule" size={16} color={theme.text.tertiary} style={styles.timeIcon} />
-                  <Text style={[
-                    styles.timeText,
-                    isBeingDragged && styles.draggedText,
-                  ]}>
-                    {formatTime(tether.scheduledStartTime!)} – {formatTime(calculateEndTime(tether.scheduledStartTime!, totalDuration))}
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.flexibleInfo}>
-                  <Text style={[
-                    styles.taskCount,
-                    isBeingDragged && styles.draggedText,
-                  ]}>
-                    {formatDuration(totalDuration)} • {tether.tasks.length} task{tether.tasks.length !== 1 ? 's' : ''}
-                  </Text>
-                </View>
-              )}
             </View>
           </TouchableOpacity>
         </Animated.View>
@@ -579,7 +574,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     position: 'relative',
   },
   tetherCardContent: {
-    padding: 16,
+    padding: 12,
   },
   draggedCard: {
     shadowColor: '#000',
@@ -643,6 +638,15 @@ const createStyles = (theme: any) => StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  cardMainContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tetherContentLeft: {
+    flex: 1,
+    paddingRight: 12,
+  },
   tetherHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -650,37 +654,35 @@ const createStyles = (theme: any) => StyleSheet.create({
     marginBottom: 8,
   },
   tetherName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: theme.text.primary,
-    flex: 1,
+    marginBottom: 4,
   },
   tetherActions: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   moreButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 6,
+  },
+  actionButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.1)', // Using transparent overlay
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 4,
-  },
-  actionButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
     backgroundColor: theme.background.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   tetherInfo: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
   },
   timeInfo: {
     flexDirection: 'row',
@@ -693,15 +695,14 @@ const createStyles = (theme: any) => StyleSheet.create({
     flex: 1,
   },
   timeIcon: {
-    marginRight: 6,
+    marginRight: 4,
   },
   timeText: {
-    fontSize: 14,
+    fontSize: 13,
     color: theme.text.tertiary,
-    flex: 1,
   },
   taskCount: {
-    fontSize: 14,
+    fontSize: 13,
     color: theme.text.tertiary,
   },
   duration: {
