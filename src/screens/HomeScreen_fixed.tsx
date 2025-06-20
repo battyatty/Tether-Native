@@ -11,7 +11,7 @@ import {
   Animated,
   Platform,
 } from 'react-native';
-import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
+import { PanGestureHandler, LongPressGestureHandler, State } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -48,7 +48,46 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const scrollY = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
 
+  // Simple drag and drop state
+  const [draggedIndex, setDraggedIndex] = useState(-1);
+  const [dragOffset] = useState(new Animated.ValueXY());
+  const cardHeight = 80;
+  
+  // Animated values for each card position
+  const cardAnimations = useRef<Animated.Value[]>([]).current;
+  
+  // Refs for gesture handlers - need both long press and pan refs
+  const longPressRefs = useRef<any[]>([]).current;
+  const panRefs = useRef<any[]>([]).current;
+
   // Update animations when tethers change
+  useEffect(() => {
+    // Ensure we have the right number of animated values
+    while (cardAnimations.length < tethers.length) {
+      cardAnimations.push(new Animated.Value(0));
+    }
+    // Remove excess animations if tethers were deleted
+    if (cardAnimations.length > tethers.length) {
+      cardAnimations.splice(tethers.length);
+    }
+    
+    // Initialize both gesture handler refs
+    while (longPressRefs.length < tethers.length) {
+      longPressRefs.push(React.createRef());
+    }
+    while (panRefs.length < tethers.length) {
+      panRefs.push(React.createRef());
+    }
+    
+    // Remove excess refs
+    if (longPressRefs.length > tethers.length) {
+      longPressRefs.splice(tethers.length);
+    }
+    if (panRefs.length > tethers.length) {
+      panRefs.splice(tethers.length);
+    }
+  }, [tethers.length, cardAnimations, longPressRefs, panRefs]);
+
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => clearError(), 5000);
@@ -56,22 +95,116 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     }
   }, [error, clearError]);
 
-  // Handle drag end for reordering tethers
-  const handleDragEnd = ({ data }: { data: Tether[] }) => {
-    // Update the tethers order
-    const reorderedIds = data.map(tether => tether.id);
-    const originalIds = tethers.map(tether => tether.id);
+  // Long press handler - activates drag mode
+  const onLongPressStateChange = (index: number) => (event: any) => {
+    const { state } = event.nativeEvent;
     
-    // Only update if order actually changed
-    if (JSON.stringify(reorderedIds) !== JSON.stringify(originalIds)) {
-      // Find what moved and call reorderTethers
-      const fromIndex = originalIds.findIndex(id => id !== reorderedIds[originalIds.indexOf(id)]);
-      const toIndex = reorderedIds.findIndex(id => id === originalIds[fromIndex]);
+    if (state === State.ACTIVE) {
+      // Long press detected - enable drag mode
+      setDraggedIndex(index);
       
-      if (fromIndex !== -1 && toIndex !== -1) {
-        reorderTethers(fromIndex, toIndex);
+      // Provide haptic feedback
+      try {
+        if (Platform.OS === 'ios') {
+          const HapticFeedback = require('react-native').HapticFeedback;
+          HapticFeedback?.impactAsync?.(HapticFeedback.ImpactFeedbackStyle.Light);
+        }
+      } catch (e) {
+        console.log('Haptic feedback not available');
       }
     }
+  };
+
+  // Pan gesture handler - only works when drag is active
+  const onGestureEvent = (index: number) => 
+    Animated.event([{ nativeEvent: { translationY: dragOffset.y } }], {
+      useNativeDriver: false,
+      listener: (event: any) => {
+        if (draggedIndex === index) {
+          const { translationY } = event.nativeEvent;
+          
+          // Calculate which position we're hovering over based on finger movement
+          const cardWithMargin = cardHeight + 12;
+          const newHoveredIndex = Math.max(0, Math.min(tethers.length - 1,
+            Math.round(index + translationY / cardWithMargin)
+          ));
+          
+          // Animate other cards to make space (but not the dragged card itself)
+          animateCardsToNewPositions(index, newHoveredIndex);
+        }
+      },
+    });
+
+  const onPanStateChange = (index: number) => (event: any) => {
+    const { state, translationY } = event.nativeEvent;
+    
+    if (state === State.END || state === State.CANCELLED) {
+      // Only reorder if we were dragging and actually moved
+      if (draggedIndex === index && Math.abs(translationY) > 20) {
+        const cardWithMargin = cardHeight + 12;
+        const targetIndex = Math.max(0, Math.min(tethers.length - 1,
+          Math.round(index + translationY / cardWithMargin)
+        ));
+
+        if (targetIndex !== index) {
+          reorderTethers(index, targetIndex);
+        }
+      }
+
+      // Reset animations with smooth spring
+      Animated.spring(dragOffset, {
+        toValue: { x: 0, y: 0 },
+        useNativeDriver: false,
+        tension: 350,
+        friction: 30,
+      }).start();
+      
+      resetCardAnimations();
+      setDraggedIndex(-1);
+    }
+  };
+
+  const animateCardsToNewPositions = (draggedIdx: number, targetIdx: number) => {
+    tethers.forEach((_, index) => {
+      if (index === draggedIdx) return; // Skip the dragged card
+      if (!cardAnimations[index]) return; // Safety check for undefined animations
+      
+      let translateY = 0;
+      
+      // Calculate where each card should move
+      if (draggedIdx < targetIdx) {
+        // Dragging down: cards between original and target move up
+        if (index > draggedIdx && index <= targetIdx) {
+          translateY = -(cardHeight + 12);
+        }
+      } else if (draggedIdx > targetIdx) {
+        // Dragging up: cards between target and original move down
+        if (index >= targetIdx && index < draggedIdx) {
+          translateY = cardHeight + 12;
+        }
+      }
+      
+      Animated.spring(cardAnimations[index], {
+        toValue: translateY,
+        useNativeDriver: true,
+        tension: 400,
+        friction: 30,
+        velocity: 0,
+      }).start();
+    });
+  };
+
+  const resetCardAnimations = () => {
+    cardAnimations.forEach((animation, index) => {
+      if (animation) { // Safety check for undefined animations
+        Animated.spring(animation, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 300,
+          friction: 25,
+        }).start();
+      }
+    });
   };
 
   // Animated values for header transformation
@@ -155,87 +288,122 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     console.log('More pressed for tether:', tetherId);
   };
 
-  const renderTetherCard = ({ item: tether, drag, isActive }: RenderItemParams<Tether>) => {
+  const renderTetherCard = (tether: Tether, index: number) => {
     const isScheduled = tether.mode === 'scheduled' && tether.scheduledStartTime;
     const totalDuration = getTotalDuration(tether);
+    const isBeingDragged = draggedIndex === index;
     
     const cardStyle = [
       styles.tetherCard,
       { borderLeftColor: isScheduled ? theme.accent.anchorLight : theme.accent.tidewake },
-      isActive && styles.draggedCard,
+      isBeingDragged && styles.draggedCard,
     ];
+
+    // Simplified animation - just scale and elevation, no translation
+    const animatedStyle = isBeingDragged ? {
+      transform: [{ scale: 1.02 }], // Just scale, no translateY
+      zIndex: 1000,
+      elevation: 10,
+    } : {
+      transform: [{ translateY: cardAnimations[index] || 0 }], // Only other cards move
+    };
     
     return (
-      <ScaleDecorator>
-        <TouchableOpacity
-          style={cardStyle}
-          onPress={() => handleTetherPress(tether.id)}
-          onLongPress={drag}
-          activeOpacity={0.7}
+      <LongPressGestureHandler
+        key={`long-${tether.id}`}
+        onHandlerStateChange={onLongPressStateChange(index)}
+        minDurationMs={200}
+        ref={longPressRefs[index]}
+        simultaneousHandlers={panRefs[index]}
+      >
+        <PanGestureHandler
+          key={`pan-${tether.id}`}
+          onGestureEvent={onGestureEvent(index)}
+          onHandlerStateChange={onPanStateChange(index)}
+          minPointers={1}
+          maxPointers={1}
+          avgTouches={false}
+          shouldCancelWhenOutside={false}
+          activeOffsetY={[-15, 15]}
+          activeOffsetX={[-15, 15]}
+          ref={panRefs[index]}
+          simultaneousHandlers={longPressRefs[index]}
+          enabled={draggedIndex === index || draggedIndex === -1}
         >
-          <View style={[
-            styles.tetherCardContent,
-            isActive && styles.draggedCardContent,
-          ]}>
-            <View style={styles.cardMainContent}>
-              <View style={styles.tetherContentLeft}>
-                <Text style={[
-                  styles.tetherName,
-                  isActive && styles.draggedText,
-                ]}>
-                  {tether.name}
-                </Text>
+          <Animated.View style={[cardStyle, animatedStyle]}>
+            <TouchableOpacity
+              style={[
+                styles.tetherCardContent,
+                isBeingDragged && styles.draggedCardContent,
+              ]}
+              onPress={() => {
+                // Only allow taps if we're not actively dragging
+                if (draggedIndex === -1) {
+                  handleTetherPress(tether.id);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.cardMainContent}>
+                <View style={styles.tetherContentLeft}>
+                  <Text style={[
+                    styles.tetherName,
+                    isBeingDragged && styles.draggedText,
+                  ]}>
+                    {tether.name}
+                  </Text>
+                  
+                  <View style={styles.tetherInfo}>
+                    {isScheduled ? (
+                      <View style={styles.timeInfo}>
+                        <Icon name="schedule" size={14} color={theme.text.tertiary} style={styles.timeIcon} />
+                        <Text style={[
+                          styles.timeText,
+                          isBeingDragged && styles.draggedText,
+                        ]}>
+                          {formatTime(tether.scheduledStartTime!)} – {formatTime(calculateEndTime(tether.scheduledStartTime!, totalDuration))}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.flexibleInfo}>
+                        <Text style={[
+                          styles.taskCount,
+                          isBeingDragged && styles.draggedText,
+                        ]}>
+                          {formatDuration(totalDuration)} • {tether.tasks.length} task{tether.tasks.length !== 1 ? 's' : ''}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
                 
-                <View style={styles.tetherInfo}>
-                  {isScheduled ? (
-                    <View style={styles.timeInfo}>
-                      <Icon name="schedule" size={14} color={theme.text.tertiary} style={styles.timeIcon} />
-                      <Text style={[
-                        styles.timeText,
-                        isActive && styles.draggedText,
-                      ]}>
-                        {formatTime(tether.scheduledStartTime!)} – {formatTime(calculateEndTime(tether.scheduledStartTime!, totalDuration))}
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={styles.flexibleInfo}>
-                      <Text style={[
-                        styles.taskCount,
-                        isActive && styles.draggedText,
-                      ]}>
-                        {formatDuration(totalDuration)} • {tether.tasks.length} task{tether.tasks.length !== 1 ? 's' : ''}
-                      </Text>
-                    </View>
-                  )}
+                <View style={styles.tetherActions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.moreButton,
+                      isBeingDragged && styles.draggedButton,
+                    ]}
+                    onPress={() => draggedIndex === -1 && handleMorePress(tether.id)}
+                    disabled={isBeingDragged}
+                  >
+                    <Icon name="more-vert" size={18} color={theme.text.tertiary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.actionButton,
+                      isBeingDragged && styles.draggedButton,
+                    ]}
+                    onPress={() => draggedIndex === -1 && handleStartTether(tether.id)}
+                    disabled={isBeingDragged}
+                  >
+                    <Icon name="play-arrow" size={18} color={theme.accent.tidewake} />
+                  </TouchableOpacity>
                 </View>
               </View>
-              
-              <View style={styles.tetherActions}>
-                <TouchableOpacity
-                  style={[
-                    styles.moreButton,
-                    isActive && styles.draggedButton,
-                  ]}
-                  onPress={() => handleMorePress(tether.id)}
-                  disabled={isActive}
-                >
-                  <Icon name="more-vert" size={18} color={theme.text.tertiary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.actionButton,
-                    isActive && styles.draggedButton,
-                  ]}
-                  onPress={() => handleStartTether(tether.id)}
-                  disabled={isActive}
-                >
-                  <Icon name="play-arrow" size={18} color={theme.accent.tidewake} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </ScaleDecorator>
+            </TouchableOpacity>
+          </Animated.View>
+        </PanGestureHandler>
+      </LongPressGestureHandler>
     );
   };
 
@@ -283,6 +451,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           { useNativeDriver: false }
         )}
         scrollEventThrottle={16}
+        scrollEnabled={draggedIndex === -1}
       >
         {/* Content with top padding to account for header and safe area */}
         <View style={[styles.content, { paddingTop: HEADER_MAX_HEIGHT + insets.top - 40 }]}>
@@ -290,14 +459,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             renderEmptyState()
           ) : (
             <View style={styles.tethersSection}>
-              <DraggableFlatList
-                data={tethers}
-                onDragEnd={handleDragEnd}
-                keyExtractor={(item) => item.id}
-                renderItem={renderTetherCard}
-                showsVerticalScrollIndicator={false}
-                scrollEnabled={false} // Disable internal scroll, use parent ScrollView
-              />
+              {tethers.map((tether, index) => renderTetherCard(tether, index))}
             </View>
           )}
         </View>
