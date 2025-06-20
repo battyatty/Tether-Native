@@ -50,13 +50,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
   // Drag and drop state
   const [isDragging, setIsDragging] = useState(false);
-  const [isActivelyDragging, setIsActivelyDragging] = useState(false); // New state for actual movement
+  const [isActivelyDragging, setIsActivelyDragging] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState(-1);
   const [hoveredIndex, setHoveredIndex] = useState(-1);
   const [dragOffset] = useState(new Animated.ValueXY());
-  const [dragStartTime, setDragStartTime] = useState(0);
-  const [dragDelayTimer, setDragDelayTimer] = useState<NodeJS.Timeout | null>(null);
-  const [dragEnabled, setDragEnabled] = useState(false);
+  const [longPressActivated, setLongPressActivated] = useState(false);
   const cardHeight = 108;
   
   // Animated values for each card position
@@ -81,26 +79,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     }
   }, [error, clearError]);
 
-  // Cleanup timers on unmount
-  useEffect(() => {
-    return () => {
-      if (dragDelayTimer) {
-        clearTimeout(dragDelayTimer);
-      }
-    };
-  }, [dragDelayTimer]);
-
   // Gesture handlers for drag and drop
   const onGestureEvent = (index: number) => 
     Animated.event([{ nativeEvent: { translationY: dragOffset.y } }], {
       useNativeDriver: false,
       listener: (event: any) => {
-        // Only process drag events if drag is enabled (after delay)
-        if (isDragging && draggedIndex === index && dragEnabled) {
-          const { translationY, velocityY } = event.nativeEvent;
+        // Only process drag events if long press was activated and we're targeting the right card
+        if (draggedIndex === index && longPressActivated) {
+          const { translationY } = event.nativeEvent;
           
-          // Only start visual dragging after movement threshold is met
-          if (Math.abs(translationY) > 15 && Math.abs(velocityY) > 50 && !isActivelyDragging) {
+          // Only start visual dragging if moved enough
+          if (Math.abs(translationY) > 10 && !isActivelyDragging) {
             setIsActivelyDragging(true);
           }
           
@@ -166,41 +155,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const onHandlerStateChange = (index: number) => (event: any) => {
     const { state } = event.nativeEvent;
 
-    if (state === State.BEGAN) {
-      const currentTime = Date.now();
-      setDragStartTime(currentTime);
-      setIsDragging(true);
-      setDraggedIndex(index);
-      setHoveredIndex(index);
-      
-      // Set a short delay before enabling drag (like a mini long press)
-      const timer = setTimeout(() => {
-        setDragEnabled(true);
-        // Provide subtle haptic feedback when drag becomes enabled
-        try {
-          if (Platform.OS === 'ios') {
-            const HapticFeedback = require('react-native').HapticFeedback;
-            HapticFeedback?.impactAsync?.(HapticFeedback.ImpactFeedbackStyle.Light);
-          }
-        } catch (e) {
-          // Gracefully handle if haptic feedback is not available
-        }
-      }, 200); // 200ms delay before drag activation
-      
-      setDragDelayTimer(timer);
-      
-    } else if (state === State.END || state === State.CANCELLED) {
-      // Clear the delay timer if gesture ends before delay completes
-      if (dragDelayTimer) {
-        clearTimeout(dragDelayTimer);
-        setDragDelayTimer(null);
-      }
-      
-      if (isDragging && draggedIndex !== -1) {
-        const holdTime = Date.now() - dragStartTime;
-        
-        // Only perform reorder if drag was enabled and user was actively dragging
-        if (dragEnabled && isActivelyDragging) {
+    if (state === State.END || state === State.CANCELLED) {
+      // Only process if we were actually dragging
+      if (longPressActivated && draggedIndex !== -1) {
+        // Only perform reorder if user was actively dragging
+        if (isActivelyDragging) {
           const targetIndex = hoveredIndex;
 
           if (targetIndex !== draggedIndex) {
@@ -219,12 +178,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         resetCardAnimations();
       }
 
+      // Always reset state when gesture ends
       setIsDragging(false);
       setIsActivelyDragging(false);
       setDraggedIndex(-1);
       setHoveredIndex(-1);
-      setDragStartTime(0);
-      setDragEnabled(false);
+      setLongPressActivated(false);
     }
   };
 
@@ -344,11 +303,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         maxPointers={1}
         avgTouches={false}
         shouldCancelWhenOutside={false}
-        activeOffsetY={[-15, 15]}
-        failOffsetX={[-25, 25]}
-        minDist={10}
+        activeOffsetY={[-20, 20]}
+        failOffsetX={[-15, 15]}
         hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
-        enabled={true}
+        enabled={longPressActivated && draggedIndex === index}
       >
         <Animated.View style={[cardStyle, animatedStyle]}>
           {/* Drop zone indicator */}
@@ -370,6 +328,24 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 handleTetherPress(tether.id);
               }
             }}
+            onLongPress={() => {
+              // Activate drag mode on long press
+              setLongPressActivated(true);
+              setIsDragging(true);
+              setDraggedIndex(index);
+              setHoveredIndex(index);
+              
+              // Provide haptic feedback
+              try {
+                if (Platform.OS === 'ios') {
+                  const HapticFeedback = require('react-native').HapticFeedback;
+                  HapticFeedback?.impactAsync?.(HapticFeedback.ImpactFeedbackStyle.Medium);
+                }
+              } catch (e) {
+                // Gracefully handle if haptic feedback is not available
+              }
+            }}
+            delayLongPress={500}
             activeOpacity={isActivelyDragging ? 1 : 0.7}
             disabled={isActivelyDragging}
           >
@@ -483,7 +459,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           { useNativeDriver: false }
         )}
         scrollEventThrottle={16}
-        scrollEnabled={!isDragging}
+        scrollEnabled={!isActivelyDragging}
       >
         {/* Content with top padding to account for header and safe area */}
         <View style={[styles.content, { paddingTop: HEADER_MAX_HEIGHT + insets.top - 40 }]}>
