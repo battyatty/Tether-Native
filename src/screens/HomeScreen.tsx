@@ -48,17 +48,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const scrollY = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
 
-  // Drag and drop state
-  const [isDragging, setIsDragging] = useState(false);
-  const [isActivelyDragging, setIsActivelyDragging] = useState(false);
+  // Simple drag and drop state - just what we need
   const [draggedIndex, setDraggedIndex] = useState(-1);
-  const [hoveredIndex, setHoveredIndex] = useState(-1);
   const [dragOffset] = useState(new Animated.ValueXY());
-  const [longPressActivated, setLongPressActivated] = useState(false);
   const cardHeight = 108;
   
   // Animated values for each card position
   const cardAnimations = useRef<Animated.Value[]>([]).current;
+  
+  // Simple refs array for pan gestures only
+  const panRefs = useRef<any[]>([]).current;
 
   // Update animations when tethers change
   useEffect(() => {
@@ -70,7 +69,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     if (cardAnimations.length > tethers.length) {
       cardAnimations.splice(tethers.length);
     }
-  }, [tethers.length, cardAnimations]);
+    
+    // Initialize gesture handler refs
+    while (panRefs.length < tethers.length) {
+      panRefs.push(React.createRef());
+    }
+    
+    // Remove excess refs
+    if (panRefs.length > tethers.length) {
+      panRefs.splice(tethers.length);
+    }
+  }, [tethers.length, cardAnimations, panRefs]);
 
   useEffect(() => {
     if (error) {
@@ -79,32 +88,22 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     }
   }, [error, clearError]);
 
-  // Gesture handlers for drag and drop
+  // Simplified gesture handler - track finger movement but don't move the dragged card
   const onGestureEvent = (index: number) => 
     Animated.event([{ nativeEvent: { translationY: dragOffset.y } }], {
       useNativeDriver: false,
       listener: (event: any) => {
-        // Only process drag events if long press was activated and we're targeting the right card
-        if (draggedIndex === index && longPressActivated) {
+        if (draggedIndex === index) {
           const { translationY } = event.nativeEvent;
           
-          // Only start visual dragging if moved enough
-          if (Math.abs(translationY) > 10 && !isActivelyDragging) {
-            setIsActivelyDragging(true);
-          }
+          // Calculate which position we're hovering over based on finger movement
+          const cardWithMargin = cardHeight + 12;
+          const newHoveredIndex = Math.max(0, Math.min(tethers.length - 1,
+            Math.round(index + translationY / cardWithMargin)
+          ));
           
-          if (isActivelyDragging) {
-            // Calculate which position we're hovering over
-            const cardWithMargin = cardHeight + 12;
-            const newHoveredIndex = Math.max(0, Math.min(tethers.length - 1, 
-              Math.round(draggedIndex + translationY / cardWithMargin)
-            ));
-            
-            if (newHoveredIndex !== hoveredIndex) {
-              setHoveredIndex(newHoveredIndex);
-              animateCardsToNewPositions(draggedIndex, newHoveredIndex);
-            }
-          }
+          // Animate other cards to make space (but not the dragged card itself)
+          animateCardsToNewPositions(index, newHoveredIndex);
         }
       },
     });
@@ -153,37 +152,45 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   };
 
   const onHandlerStateChange = (index: number) => (event: any) => {
-    const { state } = event.nativeEvent;
+    const { state, translationY } = event.nativeEvent;
+    console.log('Pan handler state change:', { index, state, translationY });
 
-    if (state === State.END || state === State.CANCELLED) {
-      // Only process if we were actually dragging
-      if (longPressActivated && draggedIndex !== -1) {
-        // Only perform reorder if user was actively dragging
-        if (isActivelyDragging) {
-          const targetIndex = hoveredIndex;
-
-          if (targetIndex !== draggedIndex) {
-            reorderTethers(draggedIndex, targetIndex);
-          }
+    if (state === State.BEGAN) {
+      // Start dragging immediately when pan begins
+      setDraggedIndex(index);
+      
+      // Provide haptic feedback
+      try {
+        if (Platform.OS === 'ios') {
+          const HapticFeedback = require('react-native').HapticFeedback;
+          HapticFeedback?.impactAsync?.(HapticFeedback.ImpactFeedbackStyle.Light);
         }
+      } catch (e) {
+        console.log('Haptic feedback not available');
+      }
+    } else if (state === State.END || state === State.CANCELLED) {
+      // Only reorder if we actually moved
+      if (draggedIndex === index && Math.abs(translationY) > 20) {
+        const cardWithMargin = cardHeight + 12;
+        const targetIndex = Math.max(0, Math.min(tethers.length - 1,
+          Math.round(index + translationY / cardWithMargin)
+        ));
 
-        // Reset animations with smooth spring
-        Animated.spring(dragOffset, {
-          toValue: { x: 0, y: 0 },
-          useNativeDriver: false,
-          tension: 350,
-          friction: 30,
-        }).start();
-        
-        resetCardAnimations();
+        if (targetIndex !== index) {
+          reorderTethers(index, targetIndex);
+        }
       }
 
-      // Always reset state when gesture ends
-      setIsDragging(false);
-      setIsActivelyDragging(false);
+      // Reset animations with smooth spring
+      Animated.spring(dragOffset, {
+        toValue: { x: 0, y: 0 },
+        useNativeDriver: false,
+        tension: 350,
+        friction: 30,
+      }).start();
+      
+      resetCardAnimations();
       setDraggedIndex(-1);
-      setHoveredIndex(-1);
-      setLongPressActivated(false);
     }
   };
 
@@ -274,24 +281,20 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     const isScheduled = tether.mode === 'scheduled' && tether.scheduledStartTime;
     const totalDuration = getTotalDuration(tether);
     const isBeingDragged = draggedIndex === index;
-    const isInDropZone = isDragging && hoveredIndex === index && draggedIndex !== index;
     
     const cardStyle = [
       styles.tetherCard,
       { borderLeftColor: isScheduled ? theme.accent.anchorLight : theme.accent.tidewake },
       isBeingDragged && styles.draggedCard,
-      isInDropZone && styles.dropZoneCard,
     ];
 
+    // Simplified animation - just scale and elevation, no translation
     const animatedStyle = isBeingDragged ? {
-      transform: [
-        { translateY: isActivelyDragging ? dragOffset.y : 0 },
-        { scale: isActivelyDragging ? 1.02 : 1 }
-      ],
+      transform: [{ scale: 1.02 }], // Just scale, no translateY
       zIndex: 1000,
       elevation: 10,
     } : {
-      transform: [{ translateY: cardAnimations[index] || 0 }],
+      transform: [{ translateY: cardAnimations[index] || 0 }], // Only other cards move
     };
     
     return (
@@ -303,20 +306,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         maxPointers={1}
         avgTouches={false}
         shouldCancelWhenOutside={false}
-        activeOffsetY={[-20, 20]}
-        failOffsetX={[-15, 15]}
-        hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
-        enabled={longPressActivated && draggedIndex === index}
+        activeOffsetY={[-8, 8]}
+        activeOffsetX={[-10, 10]}
+        ref={panRefs[index]}
       >
         <Animated.View style={[cardStyle, animatedStyle]}>
-          {/* Drop zone indicator */}
-          {isInDropZone && (
-            <View style={styles.dropZoneIndicator}>
-              <View style={styles.dropZoneLine} />
-              <Text style={styles.dropZoneText}>Drop here</Text>
-            </View>
-          )}
-          
           <TouchableOpacity
             style={[
               styles.tetherCardContent,
@@ -324,30 +318,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             ]}
             onPress={() => {
               // Only allow taps if we're not actively dragging
-              if (!isActivelyDragging) {
+              if (draggedIndex === -1) {
                 handleTetherPress(tether.id);
               }
             }}
-            onLongPress={() => {
-              // Activate drag mode on long press
-              setLongPressActivated(true);
-              setIsDragging(true);
-              setDraggedIndex(index);
-              setHoveredIndex(index);
-              
-              // Provide haptic feedback
-              try {
-                if (Platform.OS === 'ios') {
-                  const HapticFeedback = require('react-native').HapticFeedback;
-                  HapticFeedback?.impactAsync?.(HapticFeedback.ImpactFeedbackStyle.Medium);
-                }
-              } catch (e) {
-                // Gracefully handle if haptic feedback is not available
-              }
-            }}
-            delayLongPress={500}
-            activeOpacity={isActivelyDragging ? 1 : 0.7}
-            disabled={isActivelyDragging}
+            activeOpacity={isBeingDragged ? 1 : 0.7}
+            disabled={isBeingDragged}
           >
             {/* Drag handle indicator */}
             {isBeingDragged && (
@@ -369,8 +345,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                     styles.moreButton,
                     isBeingDragged && styles.draggedButton,
                   ]}
-                  onPress={() => !isActivelyDragging && handleMorePress(tether.id)}
-                  disabled={isActivelyDragging}
+                  onPress={() => draggedIndex === -1 && handleMorePress(tether.id)}
+                  disabled={isBeingDragged}
                 >
                   <Icon name="more-vert" size={20} color={theme.text.tertiary} />
                 </TouchableOpacity>
@@ -379,8 +355,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                     styles.actionButton,
                     isBeingDragged && styles.draggedButton,
                   ]}
-                  onPress={() => !isActivelyDragging && handleStartTether(tether.id)}
-                  disabled={isActivelyDragging}
+                  onPress={() => draggedIndex === -1 && handleStartTether(tether.id)}
+                  disabled={isBeingDragged}
                 >
                   <Icon name="play-arrow" size={20} color={theme.accent.tidewake} />
                 </TouchableOpacity>
@@ -459,7 +435,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           { useNativeDriver: false }
         )}
         scrollEventThrottle={16}
-        scrollEnabled={!isActivelyDragging}
+        scrollEnabled={draggedIndex === -1}
       >
         {/* Content with top padding to account for header and safe area */}
         <View style={[styles.content, { paddingTop: HEADER_MAX_HEIGHT + insets.top - 40 }]}>
