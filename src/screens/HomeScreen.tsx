@@ -159,9 +159,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     const isScheduled = tether.mode === 'scheduled' && tether.scheduledStartTime;
     const totalDuration = getTotalDuration(tether);
     
+    // Dynamic play button color based on tether type
+    const playButtonColor = isScheduled ? theme.accent.anchorLight : theme.accent.tidewake;
+    
     const cardStyle = [
       styles.tetherCard,
-      { borderLeftColor: isScheduled ? theme.accent.anchorLight : theme.accent.tidewake },
       isActive && styles.draggedCard,
     ];
     
@@ -178,6 +180,19 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             isActive && styles.draggedCardContent,
           ]}>
             <View style={styles.cardMainContent}>
+              <View style={styles.tetherActions}>
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    isActive && styles.draggedButton,
+                  ]}
+                  onPress={() => handleStartTether(tether.id)}
+                  disabled={isActive}
+                >
+                  <Icon name="play-arrow" size={18} color={playButtonColor} />
+                </TouchableOpacity>
+              </View>
+              
               <View style={styles.tetherContentLeft}>
                 <Text style={[
                   styles.tetherName,
@@ -210,7 +225,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 </View>
               </View>
               
-              <View style={styles.tetherActions}>
+              <View style={styles.tetherMoreActions}>
                 <TouchableOpacity
                   style={[
                     styles.moreButton,
@@ -220,16 +235,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                   disabled={isActive}
                 >
                   <Icon name="more-vert" size={18} color={theme.text.tertiary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.actionButton,
-                    isActive && styles.draggedButton,
-                  ]}
-                  onPress={() => handleStartTether(tether.id)}
-                  disabled={isActive}
-                >
-                  <Icon name="play-arrow" size={18} color={theme.accent.tidewake} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -389,8 +394,6 @@ const createStyles = (theme: any) => StyleSheet.create({
     backgroundColor: theme.background.secondary,
     borderRadius: 12,
     padding: 16,
-    borderWidth: 1,
-    borderColor: theme.border.primary,
   },
   ongoingHeader: {
     flexDirection: 'row',
@@ -426,10 +429,6 @@ const createStyles = (theme: any) => StyleSheet.create({
     backgroundColor: theme.background.secondary,
     borderRadius: 12,
     marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: theme.accent.tidewake,
-    borderWidth: 1,
-    borderColor: theme.border.primary,
     position: 'relative',
   },
   tetherCardContent: {
@@ -521,12 +520,15 @@ const createStyles = (theme: any) => StyleSheet.create({
   tetherActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginRight: 12,
+  },
+  tetherMoreActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   moreButton: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 6,

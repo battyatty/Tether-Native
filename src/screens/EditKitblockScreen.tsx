@@ -535,8 +535,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderLeftWidth: 4,
     borderLeftColor: '#00BFA5',
-    borderWidth: 1,
-    borderColor: '#334155',
   },
   taskHeader: {
     flexDirection: 'row',

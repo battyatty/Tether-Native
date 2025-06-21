@@ -334,8 +334,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#334155',
   },
   taskInfo: {
     flex: 1,

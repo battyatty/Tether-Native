@@ -751,8 +751,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E293B',
     borderRadius: 8,
     padding: 16,
-    borderWidth: 1,
-    borderColor: '#334155',
   },
   taskContent: {
     flexDirection: 'row',

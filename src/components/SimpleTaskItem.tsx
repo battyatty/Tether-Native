@@ -248,8 +248,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E293B',
     marginVertical: 2,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#334155',
     borderLeftWidth: 4,
     borderLeftColor: '#00BFA5',
   },
