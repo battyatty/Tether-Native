@@ -13,6 +13,7 @@ interface TetherContextType {
   // Tether actions
   createTether: (name: string, tasks: Task[]) => Promise<void>;
   deleteTether: (id: string) => Promise<void>;
+  duplicateTether: (id: string) => Promise<void>;
   updateTether: (tether: Tether) => Promise<void>;
   updateTetherMode: (tetherId: string, mode: TetherMode, scheduledStartTime?: string) => Promise<void>;
   
@@ -45,6 +46,7 @@ interface TetherContextType {
   // Utility actions
   clearError: () => void;
   reorderTethers: (fromIndex: number, toIndex: number) => Promise<void>;
+  reorderKitblocks: (fromIndex: number, toIndex: number) => Promise<void>;
 }
 
 const TetherContext = createContext<TetherContextType | undefined>(undefined);
@@ -211,6 +213,32 @@ export const TetherProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }
     } catch (err) {
       setError('Failed to delete tether');
+      throw err;
+    }
+  };
+
+  const duplicateTether = async (id: string) => {
+    try {
+      const tetherToDuplicate = tethers.find(t => t.id === id);
+      if (!tetherToDuplicate) {
+        throw new Error('Tether not found');
+      }
+
+      const duplicatedTether: Tether = {
+        ...tetherToDuplicate,
+        id: generateId(),
+        name: `${tetherToDuplicate.name} (Copy)`,
+        tasks: tetherToDuplicate.tasks.map(task => ({
+          ...task,
+          id: generateId(),
+        })),
+        createdAt: new Date().toISOString(),
+        lastUsed: new Date().toISOString(),
+      };
+
+      setTethers(prev => [duplicatedTether, ...prev]);
+    } catch (err) {
+      setError('Failed to duplicate tether');
       throw err;
     }
   };
@@ -570,6 +598,18 @@ export const TetherProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   };
 
+  const reorderKitblocks = async (fromIndex: number, toIndex: number) => {
+    try {
+      const newKitblocks = [...kitblocks];
+      const [movedKitblock] = newKitblocks.splice(fromIndex, 1);
+      newKitblocks.splice(toIndex, 0, movedKitblock);
+      setKitblocks(newKitblocks);
+    } catch (err) {
+      setError('Failed to reorder kitblocks');
+      throw err;
+    }
+  };
+
   const value: TetherContextType = {
     tethers,
     kitblocks,
@@ -578,6 +618,7 @@ export const TetherProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     error,
     createTether,
     deleteTether,
+    duplicateTether,
     updateTether,
     updateTetherMode,
     createKitblock,
@@ -599,6 +640,7 @@ export const TetherProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     duplicateTaskInKitblock,
     updateTaskInKitblock,
     reorderTethers,
+    reorderKitblocks,
     clearError,
   };
 

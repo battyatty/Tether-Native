@@ -39,6 +39,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     resumeTether, 
     pauseTether,
     reorderTethers,
+    deleteTether,
+    duplicateTether,
     clearError 
   } = useTether();
   
@@ -151,8 +153,55 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   };
 
   const handleMorePress = (tetherId: string) => {
-    // TODO: Implement more actions menu
-    console.log('More pressed for tether:', tetherId);
+    const tether = tethers.find(t => t.id === tetherId);
+    if (!tether) return;
+
+    Alert.alert(
+      tether.name,
+      'Choose an action',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Duplicate',
+          onPress: () => handleDuplicateTether(tetherId),
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => handleDeleteTether(tether),
+        },
+      ]
+    );
+  };
+
+  const handleDuplicateTether = async (tetherId: string) => {
+    try {
+      await duplicateTether(tetherId);
+      // No need for alert, the user will see the duplicated tether appear
+    } catch (err) {
+      Alert.alert('Error', 'Failed to duplicate tether');
+    }
+  };
+
+  const handleDeleteTether = (tether: Tether) => {
+    Alert.alert(
+      'Delete Tether',
+      `Are you sure you want to delete "${tether.name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteTether(tether.id);
+            } catch (err) {
+              Alert.alert('Error', 'Failed to delete tether');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const renderTetherCard = ({ item: tether, drag, isActive }: RenderItemParams<Tether>) => {

@@ -9,6 +9,7 @@ import {
   Alert,
   Animated,
 } from 'react-native';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -27,7 +28,7 @@ const HEADER_MIN_HEIGHT = 60;
 const HEADER_SCROLL_DISTANCE = HEADER_MAX_HEIGHT - HEADER_MIN_HEIGHT;
 
 const KitblocksScreen: React.FC<Props> = ({ navigation }) => {
-  const { kitblocks, deleteKitblock } = useTether();
+  const { kitblocks, deleteKitblock, reorderKitblocks } = useTether();
   const { theme } = useTheme();
   const styles = createStyles(theme);
   const insets = useSafeAreaInsets();
@@ -52,6 +53,24 @@ const KitblocksScreen: React.FC<Props> = ({ navigation }) => {
     outputRange: [0, 1],
     extrapolate: 'clamp',
   });
+
+  // Handle drag end for reordering kitblocks
+  const handleDragEnd = ({ data }: { data:  Kitblock[] }) => {
+    // Update the kitblocks order
+    const reorderedIds = data.map(kitblock => kitblock.id);
+    const originalIds = kitblocks.map(kitblock => kitblock.id);
+    
+    // Only update if order actually changed
+    if (JSON.stringify(reorderedIds) !== JSON.stringify(originalIds)) {
+      // Find what moved and call reorderKitblocks
+      const fromIndex = originalIds.findIndex(id => id !== reorderedIds[originalIds.indexOf(id)]);
+      const toIndex = reorderedIds.findIndex(id => id === originalIds[fromIndex]);
+      
+      if (fromIndex !== -1 && toIndex !== -1) {
+        reorderKitblocks(fromIndex, toIndex);
+      }
+    }
+  };
 
   const handleDeleteKitblock = (kitblock: Kitblock) => {
     Alert.alert(
@@ -107,40 +126,68 @@ const KitblocksScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  const renderKitblockCard = ({ item: kitblock }: { item: Kitblock }) => {
+  const renderKitblockCard = ({ item: kitblock, drag, isActive }: RenderItemParams<Kitblock>) => {
     const totalDuration = kitblock.tasks.reduce((sum, task) => sum + task.duration, 0);
 
+    const cardStyle = [
+      styles.kitblockCard,
+      isActive && styles.draggedCard,
+    ];
+
     return (
-      <TouchableOpacity
-        style={styles.kitblockCard}
-        onPress={() => navigation.navigate('EditKitblock', { kitblockId: kitblock.id })}
-        activeOpacity={0.7}
-      >
-        <View style={styles.cardMainContent}>
-          <View style={styles.kitblockContentLeft}>
-            <Text style={styles.kitblockName}>{kitblock.name}</Text>
-            
-            {kitblock.description && (
-              <Text style={styles.kitblockDescription}>{kitblock.description}</Text>
-            )}
-            
-            <View style={styles.kitblockInfo}>
-              <Text style={styles.kitblockInfoText}>
-                {formatDuration(totalDuration)} • {kitblock.tasks.length} task{kitblock.tasks.length !== 1 ? 's' : ''}
+      <ScaleDecorator>
+        <TouchableOpacity
+          style={cardStyle}
+          onPress={() => navigation.navigate('EditKitblock', { kitblockId: kitblock.id })}
+          onLongPress={drag}
+          activeOpacity={0.7}
+        >
+          <View style={[
+            styles.cardMainContent,
+            isActive && styles.draggedCardContent,
+          ]}>
+            <View style={styles.kitblockContentLeft}>
+              <Text style={[
+                styles.kitblockName,
+                isActive && styles.draggedText,
+              ]}>
+                {kitblock.name}
               </Text>
+              
+              {kitblock.description && (
+                <Text style={[
+                  styles.kitblockDescription,
+                  isActive && styles.draggedText,
+                ]}>
+                  {kitblock.description}
+                </Text>
+              )}
+              
+              <View style={styles.kitblockInfo}>
+                <Text style={[
+                  styles.kitblockInfoText,
+                  isActive && styles.draggedText,
+                ]}>
+                  {formatDuration(totalDuration)} • {kitblock.tasks.length} task{kitblock.tasks.length !== 1 ? 's' : ''}
+                </Text>
+              </View>
+            </View>
+            
+            <View style={styles.kitblockActions}>
+              <TouchableOpacity
+                style={[
+                  styles.moreButton,
+                  isActive && styles.draggedButton,
+                ]}
+                onPress={() => handleMorePress(kitblock.id)}
+                disabled={isActive}
+              >
+                <Icon name="more-vert" size={18} color={theme.text.tertiary} />
+              </TouchableOpacity>
             </View>
           </View>
-          
-          <View style={styles.kitblockActions}>
-            <TouchableOpacity
-              style={styles.moreButton}
-              onPress={() => handleMorePress(kitblock.id)}
-            >
-              <Icon name="more-vert" size={18} color={theme.text.tertiary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </ScaleDecorator>
     );
   };
 
@@ -195,10 +242,11 @@ const KitblocksScreen: React.FC<Props> = ({ navigation }) => {
           {kitblocks.length === 0 ? (
             renderEmptyState()
           ) : (
-            <FlatList
+            <DraggableFlatList
               data={kitblocks}
-              renderItem={renderKitblockCard}
+              onDragEnd={handleDragEnd}
               keyExtractor={(item) => item.id}
+              renderItem={renderKitblockCard}
               showsVerticalScrollIndicator={false}
               scrollEnabled={false} // Disable internal scroll, use parent ScrollView
             />
@@ -271,6 +319,24 @@ const createStyles = (theme: any) => StyleSheet.create({
     marginBottom: 12,
     borderLeftWidth: 4,
     borderLeftColor: theme.accent.tidewake,
+  },
+  draggedCard: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    backgroundColor: theme.background.secondary,
+    borderColor: theme.accent.tidewake,
+    borderWidth: 2,
+  },
+  draggedCardContent: {
+    opacity: 0.95,
+  },
+  draggedText: {
+    opacity: 0.8,
+  },
+  draggedButton: {
+    opacity: 0.6,
   },
   cardMainContent: {
     flexDirection: 'row',

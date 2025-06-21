@@ -13,7 +13,8 @@ import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useTether } from '../context/TetherContext';
 import { RootStackParamList, Task } from '../types';
-import { MobileTaskInput, SimpleTaskItem, QuickTaskInput, GestureHandlerTest } from '../components';
+import { MobileTaskInput, SimpleTaskItem, QuickTaskInput, GestureHandlerTest, CalendarImportModal } from '../components';
+import { generateId } from '../utils/helpers';
 
 type EditKitblockScreenNavigationProp = StackNavigationProp<RootStackParamList, 'EditKitblock'>;
 type EditKitblockScreenRouteProp = RouteProp<RootStackParamList, 'EditKitblock'>;
@@ -35,6 +36,7 @@ const EditKitblockScreen: React.FC<Props> = ({ navigation, route }) => {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [showQuickTaskInput, setShowQuickTaskInput] = useState(false);
+  const [showCalendarImport, setShowCalendarImport] = useState(false);
   
   const kitblock = kitblocks.find(kb => kb.id === kitblockId);
 
@@ -68,6 +70,22 @@ const EditKitblockScreen: React.FC<Props> = ({ navigation, route }) => {
     } catch (err) {
       console.error('Failed to duplicate task in kitblock:', err);
       Alert.alert('Error', 'Failed to duplicate task');
+    }
+  };
+
+  const handleCalendarImport = async (tasks: Omit<Task, 'id'>[]) => {
+    try {
+      for (const task of tasks) {
+        const taskWithId: Task = {
+          ...task,
+          id: generateId(),
+        };
+        await addTaskToKitblock(kitblockId, taskWithId);
+      }
+      setShowCalendarImport(false);
+      Alert.alert('Success', `${tasks.length} task${tasks.length !== 1 ? 's' : ''} imported successfully!`);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to import calendar events');
     }
   };
 
@@ -395,6 +413,19 @@ const EditKitblockScreen: React.FC<Props> = ({ navigation, route }) => {
             ))
           )}
         </View>
+
+        {/* Action Buttons - Hide in selection mode */}
+        {!isSelectionMode && (
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={[styles.button, styles.secondaryButton]}
+              onPress={() => setShowCalendarImport(true)}
+            >
+              <Icon name="event" size={20} color="#00BFA5" />
+              <Text style={styles.secondaryButtonText}>Import Calendar</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
       {/* Add Task FAB - Hide in selection mode */}
@@ -413,6 +444,13 @@ const EditKitblockScreen: React.FC<Props> = ({ navigation, route }) => {
         visible={showQuickTaskInput}
         onSave={handleTaskSave}
         onClose={() => setShowQuickTaskInput(false)}
+      />
+
+      {/* Calendar Import Modal */}
+      <CalendarImportModal
+        visible={showCalendarImport}
+        onImport={handleCalendarImport}
+        onClose={() => setShowCalendarImport(false)}
       />
     </SafeAreaView>
   );
@@ -634,6 +672,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
     textAlign: 'center',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: 24,
+    paddingBottom: 100, // Space for FAB
+  },
+  button: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 20,
+    gap: 8,
+  },
+  secondaryButton: {
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#00BFA5',
+  },
+  secondaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#00BFA5',
   },
 });
 

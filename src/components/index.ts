@@ -9,3 +9,5 @@ export { default as GestureTestWrapper } from './GestureTestWrapper';
 export { default as GestureHandlerTest } from './GestureHandlerTest';
 export { default as BottomNavigation } from './BottomNavigation';
 export { default as OngoingTetherBar } from './OngoingTetherBar';
+export { default as CalendarImportModal } from './CalendarImportModal';
+export { default as ToggleNavButton } from './ToggleNavButton';

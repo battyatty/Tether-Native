@@ -13,7 +13,8 @@ import { RouteProp } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { Task, RootStackParamList, TetherMode } from '../types';
 import { useTether } from '../context/TetherContext';
-import { QuickTaskInput, SimpleTaskItem, GestureHandlerTest } from '../components';
+import { QuickTaskInput, SimpleTaskItem, GestureHandlerTest, CalendarImportModal } from '../components';
+import { generateId } from '../utils/helpers';
 
 type EditTetherScreenNavigationProp = StackNavigationProp<RootStackParamList, 'EditTether'>;
 type EditTetherScreenRouteProp = RouteProp<RootStackParamList, 'EditTether'>;
@@ -43,6 +44,7 @@ const EditTetherScreen: React.FC<EditTetherScreenProps> = ({ navigation, route }
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [showQuickTaskInput, setShowQuickTaskInput] = useState(false);
+  const [showCalendarImport, setShowCalendarImport] = useState(false);
   
   const tether = tethers.find(t => t.id === tetherId);
 
@@ -133,6 +135,22 @@ const EditTetherScreen: React.FC<EditTetherScreenProps> = ({ navigation, route }
       Alert.alert('Success', 'Kitblock added to tether!');
     } catch (err) {
       Alert.alert('Error', 'Failed to add kitblock');
+    }
+  };
+
+  const handleCalendarImport = async (tasks: Omit<Task, 'id'>[]) => {
+    try {
+      for (const task of tasks) {
+        const taskWithId: Task = {
+          ...task,
+          id: generateId(),
+        };
+        await addTaskToTether(tetherId, taskWithId);
+      }
+      setShowCalendarImport(false);
+      Alert.alert('Success', `${tasks.length} task${tasks.length !== 1 ? 's' : ''} imported successfully!`);
+    } catch (err) {
+      Alert.alert('Error', 'Failed to import calendar events');
     }
   };
 
@@ -500,6 +518,14 @@ const EditTetherScreen: React.FC<EditTetherScreenProps> = ({ navigation, route }
               <Icon name="widgets" size={20} color="#00BFA5" />
               <Text style={styles.secondaryButtonText}>Add Kitblock</Text>
             </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.button, styles.secondaryButton]}
+              onPress={() => setShowCalendarImport(true)}
+            >
+              <Icon name="event" size={20} color="#00BFA5" />
+              <Text style={styles.secondaryButtonText}>Import Calendar</Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
@@ -590,6 +616,13 @@ const EditTetherScreen: React.FC<EditTetherScreenProps> = ({ navigation, route }
         visible={showQuickTaskInput}
         onSave={handleTaskSave}
         onClose={() => setShowQuickTaskInput(false)}
+      />
+
+      {/* Calendar Import Modal */}
+      <CalendarImportModal
+        visible={showCalendarImport}
+        onImport={handleCalendarImport}
+        onClose={() => setShowCalendarImport(false)}
       />
     </SafeAreaView>
   );

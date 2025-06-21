@@ -9,6 +9,7 @@ import {
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { MainTabParamList } from '../types';
 import { useTheme } from '../context/ThemeContext';
+import ToggleNavButton from './ToggleNavButton';
 
 interface BottomNavigationProps {
   currentRoute: string;
@@ -75,51 +76,12 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({
           </Text>
         </TouchableOpacity>
 
-        {/* Tethers */}
-        <TouchableOpacity
-          style={[
-            styles.navItem,
-            currentRoute === 'Home' && styles.activeNavItem,
-          ]}
-          onPress={() => handleTabNavigation('Home')}
-        >
-          <Icon 
-            name="anchor" 
-            size={20} 
-            color={currentRoute === 'Home' ? theme.accent.tidewake : theme.text.quaternary} 
-          />
-          <Text 
-            style={[
-              styles.navLabel,
-              currentRoute === 'Home' && styles.activeNavLabel,
-            ]}
-          >
-            TETHERS
-          </Text>
-        </TouchableOpacity>
-
-        {/* Kit Blocks */}
-        <TouchableOpacity
-          style={[
-            styles.navItem,
-            currentRoute === 'Kitblocks' && styles.activeNavItem,
-          ]}
-          onPress={() => handleTabNavigation('Kitblocks')}
-        >
-          <Icon 
-            name="apps" 
-            size={20} 
-            color={currentRoute === 'Kitblocks' ? theme.accent.tidewake : theme.text.quaternary} 
-          />
-          <Text 
-            style={[
-              styles.navLabel,
-              currentRoute === 'Kitblocks' && styles.activeNavLabel,
-            ]}
-          >
-            KIT BLOCKS
-          </Text>
-        </TouchableOpacity>
+        {/* Toggle Navigation Button for Tethers/KitBlocks */}
+        <ToggleNavButton 
+          style={styles.toggleNavContainer}
+          currentRoute={currentRoute}
+          onTabPress={handleTabNavigation}
+        />
 
         {/* Dynamic Add Button */}
         <TouchableOpacity
@@ -145,10 +107,8 @@ const createStyles = (theme: any) => StyleSheet.create({
     backgroundColor: theme.background.primary,
     paddingTop: 8,
     paddingBottom: 2,
-    paddingHorizontal: 16,
-    borderTopWidth: 1,
-    borderTopColor: theme.border.primary,
-    height: 55,
+    paddingHorizontal: 12,
+    height: 60,
   },
   navItem: {
     alignItems: 'center',
@@ -168,6 +128,9 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   activeNavLabel: {
     color: theme.accent.tidewake,
+  },
+  toggleNavContainer: {
+    flex: 2.5, // Give toggle button more space than other items
   },
   addButton: {
     width: 48,
